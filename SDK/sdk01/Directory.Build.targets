@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Project>
+<!-- Hook into A's build graph right before NuGet reads A's PackageReference items.
+       Anything added to @(PackageReference) here is visible to A's restore/build. -->
+  <Target Name="ImportPackageReferencesFromProjectReferences"
+          BeforeTargets="CollectPackageReferences">
+
+    <!-- Filter ProjectReference items to only flagged ones.
+         Metadata lookup syntax %(ProjectReference.X) is per-item.
+         If metadata is missing, it is empty string -> condition is false. -->
+    <ItemGroup>
+      <_PackageRefSourceProject Include="@(ProjectReference)"
+                                Condition="'%(ProjectReference.PrivateAssets)' == 'all'"
+						  RemoveMetadata="PrivateAssets" />
+    </ItemGroup>
+
+    <!-- Call CollectPackageReferences in each selected referenced project (e.g., B).
+         NuGet's CollectPackageReferences target returns @(PackageReference).
+         MSBuild task exposes target returns through TargetOutputs. -->
+    <MSBuild Projects="@(_PackageRefSourceProject)"
+             Targets="CollectPackageReferences"
+             BuildInParallel="true"
+             SkipNonexistentTargets="true">
+      <Output TaskParameter="TargetOutputs" ItemName="_PackageRefsFromProjectRef" />
+    </MSBuild>
+
+    <ItemGroup>
+      <!-- Remove incoming package refs whose package ID already exists in A.
+           MatchOnMetadata=Identity compares item identity (for PackageReference: package ID). -->
+      <_PackageRefsFromProjectRef Remove="@(PackageReference)"
+                                  MatchOnMetadata="Identity" />
+
+      <!-- Re-register collected items as PackageReference in A.
+           KeepMetadata is a whitelist to avoid copying unrelated metadata from source items. -->
+      <PackageReference Include="@(_PackageRefsFromProjectRef)"
+                        KeepMetadata="Version;IncludeAssets;ExcludeAssets;PrivateAssets;NoWarn;GeneratePathProperty;Aliases" />
+    </ItemGroup>
+  </Target>
+</Project>
