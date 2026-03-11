@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <EnablePackingFromPrivateProjectReferenceSubtree Condition="'$(EnablePackingFromPrivateProjectReferenceSubtree)' == ''">true</EnablePackingFromPrivateProjectReferenceSubtree>
+    <TargetsForTfmSpecificBuildOutput Condition="'$(EnablePackingFromPrivateProjectReferenceSubtree)' == 'true' And !$(TargetsForTfmSpecificBuildOutput.Contains('CollectBuildOutputsFromPrivateProjectReferenceSubtreeForPack'))">$(TargetsForTfmSpecificBuildOutput);CollectBuildOutputsFromPrivateProjectReferenceSubtreeForPack</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+
+  <Target Name="ImportPackageReferencesFromPrivateProjectReferenceSubtree"
+          BeforeTargets="CollectPackageReferences"
+          Condition="'$(EnablePackingFromPrivateProjectReferenceSubtree)' == 'true' And ('$(TargetFramework)' != '' Or '$(TargetFrameworks)' == '')">
+    <ItemGroup>
+      <_PrivateProjectReferenceSubtreeRoot Include="@(ProjectReference)"
+                                           Condition="'%(ProjectReference.PrivateAssets)' == 'all' And '%(ProjectReference.ReferenceOutputAssembly)' != 'false'"
+                                           RemoveMetadata="PrivateAssets" />
+    </ItemGroup>
+
+    <MSBuild Projects="@(_PrivateProjectReferenceSubtreeRoot)"
+             Targets="CollectPackageReferencesFromCurrentProjectReferenceSubtree"
+             BuildInParallel="true"
+             SkipNonexistentTargets="true"
+             Properties="TargetFramework=$(TargetFramework);BuildProjectReferences=false">
+      <Output TaskParameter="TargetOutputs" ItemName="_CurrentProjectReferenceSubtreePackageReference" />
+    </MSBuild>
+
+    <ItemGroup>
+      <_CurrentProjectReferenceSubtreePackageReference Remove="@(PackageReference)"
+                                                       MatchOnMetadata="Identity" />
+      <PackageReference Include="@(_CurrentProjectReferenceSubtreePackageReference)"
+                        KeepMetadata="Version;IncludeAssets;ExcludeAssets;PrivateAssets;NoWarn;GeneratePathProperty;Aliases" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="CollectBuildOutputsFromPrivateProjectReferenceSubtreeForPack"
+          Condition="'$(EnablePackingFromPrivateProjectReferenceSubtree)' == 'true' And '$(IncludeBuildOutput)' == 'true' And ('$(TargetFramework)' != '' Or '$(TargetFrameworks)' == '')">
+    <ItemGroup>
+      <_PrivateProjectReferenceSubtreeRoot Include="@(ProjectReference)"
+                                           Condition="'%(ProjectReference.PrivateAssets)' == 'all' And '%(ProjectReference.ReferenceOutputAssembly)' != 'false'"
+                                           RemoveMetadata="PrivateAssets" />
+    </ItemGroup>
+
+    <MSBuild Projects="@(_PrivateProjectReferenceSubtreeRoot)"
+             Targets="CollectBuildOutputsFromChildProjectReferenceSubtree"
+             BuildInParallel="true"
+             SkipNonexistentTargets="true"
+             Properties="TargetFramework=$(TargetFramework);BuildProjectReferences=false">
+      <Output TaskParameter="TargetOutputs" ItemName="_CurrentProjectReferenceSubtreeBuildOutput" />
+    </MSBuild>
+
+    <ItemGroup>
+      <_CurrentProjectReferenceSubtreeBuildOutput Remove="@(BuildOutputInPackage)"
+                                                  MatchOnMetadata="Identity" />
+      <_CurrentProjectReferenceSubtreeBuildOutput Remove="@(BuildOutputInPackage)"
+                                                  MatchOnMetadata="TargetPath" />
+      <BuildOutputInPackage Include="@(_CurrentProjectReferenceSubtreeBuildOutput)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="CollectPackageReferencesFromCurrentProjectReferenceSubtree"
+          Condition="'$(EnablePackingFromPrivateProjectReferenceSubtree)' == 'true' And ('$(TargetFramework)' != '' Or '$(TargetFrameworks)' == '')"
+          Returns="@(_CurrentProjectReferenceSubtreePackageReference)">
+    <ItemGroup>
+      <_CurrentProjectReferenceSubtreeProjectReference Include="@(ProjectReference)"
+                                                       Condition="'%(ProjectReference.ReferenceOutputAssembly)' != 'false'"
+                                                       RemoveMetadata="PrivateAssets" />
+      <_CurrentProjectReferenceSubtreePackageReference Include="@(PackageReference)" />
+    </ItemGroup>
+
+    <MSBuild Projects="@(_CurrentProjectReferenceSubtreeProjectReference)"
+             Targets="CollectPackageReferencesFromCurrentProjectReferenceSubtree"
+             BuildInParallel="true"
+             SkipNonexistentTargets="true"
+             Properties="TargetFramework=$(TargetFramework);BuildProjectReferences=false">
+      <Output TaskParameter="TargetOutputs" ItemName="_PackageReferenceCollectedFromChildProjectReferenceSubtree" />
+    </MSBuild>
+
+    <ItemGroup>
+      <_PackageReferenceCollectedFromChildProjectReferenceSubtree Remove="@(_CurrentProjectReferenceSubtreePackageReference)"
+                                                                  MatchOnMetadata="Identity" />
+      <_CurrentProjectReferenceSubtreePackageReference Include="@(_PackageReferenceCollectedFromChildProjectReferenceSubtree)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="CollectBuildOutputsFromChildProjectReferenceSubtree"
+          Condition="'$(EnablePackingFromPrivateProjectReferenceSubtree)' == 'true' And '$(IncludeBuildOutput)' == 'true' And ('$(TargetFramework)' != '' Or '$(TargetFrameworks)' == '')"
+          Returns="@(_ChildProjectReferenceSubtreeBuildOutput)">
+    <ItemGroup>
+      <_CurrentProjectReferenceSubtreeProjectReference Include="@(ProjectReference)"
+                                                       Condition="'%(ProjectReference.ReferenceOutputAssembly)' != 'false'"
+                                                       RemoveMetadata="PrivateAssets" />
+    </ItemGroup>
+
+    <MSBuild Projects="@(_CurrentProjectReferenceSubtreeProjectReference)"
+             Targets="CollectBuildOutputsFromCurrentProjectReferenceSubtree"
+             BuildInParallel="true"
+             SkipNonexistentTargets="true"
+             Properties="TargetFramework=$(TargetFramework);BuildProjectReferences=false">
+      <Output TaskParameter="TargetOutputs" ItemName="_ChildProjectReferenceSubtreeBuildOutput" />
+    </MSBuild>
+  </Target>
+
+  <Target Name="CollectBuildOutputsFromCurrentProjectReferenceSubtree"
+          DependsOnTargets="BuiltProjectOutputGroup;DocumentationProjectOutputGroup;SatelliteDllsProjectOutputGroup"
+          Condition="'$(EnablePackingFromPrivateProjectReferenceSubtree)' == 'true' And '$(IncludeBuildOutput)' == 'true' And ('$(TargetFramework)' != '' Or '$(TargetFrameworks)' == '')"
+          Returns="@(_CurrentProjectReferenceSubtreeBuildOutput)">
+    <ItemGroup>
+      <_CurrentProjectReferenceSubtreeProjectReference Include="@(ProjectReference)"
+                                                       Condition="'%(ProjectReference.ReferenceOutputAssembly)' != 'false'"
+                                                       RemoveMetadata="PrivateAssets" />
+      <_CurrentProjectReferenceSubtreeBuildOutput Include="@(SatelliteDllsProjectOutputGroupOutput);
+                                                           @(BuiltProjectOutputGroupOutput);
+                                                           @(DocumentationProjectOutputGroupOutput)" />
+    </ItemGroup>
+
+    <MSBuild Projects="@(_CurrentProjectReferenceSubtreeProjectReference)"
+             Targets="CollectBuildOutputsFromCurrentProjectReferenceSubtree"
+             BuildInParallel="true"
+             SkipNonexistentTargets="true"
+             Properties="TargetFramework=$(TargetFramework);BuildProjectReferences=false">
+      <Output TaskParameter="TargetOutputs" ItemName="_BuildOutputCollectedFromChildProjectReferenceSubtree" />
+    </MSBuild>
+
+    <ItemGroup>
+      <_BuildOutputCollectedFromChildProjectReferenceSubtree Remove="@(_CurrentProjectReferenceSubtreeBuildOutput)"
+                                                             MatchOnMetadata="Identity" />
+      <_BuildOutputCollectedFromChildProjectReferenceSubtree Remove="@(_CurrentProjectReferenceSubtreeBuildOutput)"
+                                                             MatchOnMetadata="TargetPath" />
+      <_CurrentProjectReferenceSubtreeBuildOutput Include="@(_BuildOutputCollectedFromChildProjectReferenceSubtree)" />
+    </ItemGroup>
+  </Target>
+</Project>
